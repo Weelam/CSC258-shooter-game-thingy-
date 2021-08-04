@@ -68,34 +68,24 @@
 	obstacleArray2: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0 
 	obstacleArray3: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0 
 	obstacleArray4: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0 
-	newObstacles: .space 9
-	oldObstacles: .space 9
 	obstacleArrayX: .word 0, 0, 0, -1, -1, -1, -2, -2, -2
 	obstacleArrayY: .word 0, -1, -2, 0, -1, -2, 0, -1, -2
-	shipArray: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180
-	arrayAccess: .word 0
+	shipArray: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
+	shipArrayImut: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
 .text
 
 .globl main
 
 main:
 	li $t0, BASE_ADDRESS # $t0 stores the base address for display
-	# display ship
-	li $t1, RED # t1 stores red 
-	sw $t1, 1792($t0) 
-	sw $t1, 1920($t0)  
-	sw $t1, 2048($t0) 
-	sw $t1, 2176($t0) 
-	sw $t1, 2304($t0) 
-	sw $t1, 1924($t0)  
-	sw $t1, 2052($t0) 
-	sw $t1, 2180($t0) 
-	li $t1, BLUE # t1 stores blue
-	sw $t1, 2056($t0)	
-	
+		
+	# generate initial location of ship
+	la $a1, shipArrayImut
+	jal generate_ship
+
 	la $s6, obstacleArrayX # mem address of obstacleArrayX
 	la $s7, obstacleArrayY # mem addresss of obstacleArrayY
-		
+	
 main_loop:	
 	
 	la $s0, strObstacles
@@ -113,6 +103,137 @@ keypress_happened:
 	lw $t2, 4($t9) # this assumes $t9 is set to 0xfff0000 from before
 	beq $t2, 0x70, respond_to_p
 	beq $t2, 0x1b, respond_to_esc
+	
+	# wasd keys
+	beq $t2, 0x77, respond_to_w
+	beq $t2, 0x61, respond_to_a
+	beq $t2, 0x73, respond_to_s
+	beq $t2, 0x64, respond_to_d
+	
+generate_ship:
+	
+	# push ra to stack
+	addi $sp, $sp, -4
+	sw $ra, 0($sp)
+	# draw the red part
+	li $a3, RED 
+	add $a2, $a1, $0
+	
+	jal draw
+	
+	# draw blue tip now 
+	lw $t2, 32($a1)
+	add $t2, $t2, $t0
+	li $t1, BLUE 
+	sw $t1, 0($t2)	
+	# pop ra from stack and then return
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+	jr $ra	
+	
+respond_to_w:
+	# update position
+	addi $a0, $0, 0 # x
+	addi $a1, $0, -128 # y
+	
+	# erase ship
+	li $a3, BLACK
+	la $a2, shipArray
+	jal draw
+	
+	jal move_ship
+	
+	# redraw ship now
+	li $a3, RED
+	la $a2, shipArray
+	
+	jal draw
+	
+	# redraw blue tip 
+	lw $t2, 32($a2)
+	add $t2, $t2, $t0
+	li $t1, BLUE 
+	sw $t1, 0($t2)	
+	
+	j obst
+	
+respond_to_a:
+	# update position
+	addi $a0, $0, -4 # x
+	addi $a1, $0, 0 # y
+	
+	# erase ship
+	li $a3, BLACK
+	la $a2, shipArray
+	jal draw
+	
+	jal move_ship
+	
+	# redraw ship now
+	li $a3, RED
+	la $a2, shipArray
+	
+	jal draw
+	
+	# redraw blue tip 
+	lw $t2, 32($a2)
+	add $t2, $t2, $t0
+	li $t1, BLUE 
+	sw $t1, 0($t2)	
+	
+	j obst
+	
+respond_to_s:
+	# update position
+	addi $a0, $0, 0 # x
+	addi $a1, $0, 128 # y
+
+	# erase ship
+	li $a3, BLACK
+	la $a2, shipArray
+	jal draw
+	
+	jal move_ship
+	
+	# redraw ship now
+	li $a3, RED
+	la $a2, shipArray
+	
+	jal draw
+	
+	# redraw blue tip 
+	lw $t2, 32($a2)
+	add $t2, $t2, $t0
+	li $t1, BLUE 
+	sw $t1, 0($t2)	
+	
+	j obst
+	
+respond_to_d:
+	# update position
+	addi $a0, $0, 4 # x
+	addi $a1, $0, 0 # y
+	
+	# erase ship
+	li $a3, BLACK
+	la $a2, shipArray
+	jal draw
+	
+	jal move_ship
+	
+	# redraw ship now
+	li $a3, RED
+	la $a2, shipArray
+	
+	jal draw
+	
+	# redraw blue tip 
+	lw $t2, 32($a2)
+	add $t2, $t2, $t0
+	li $t1, BLUE 
+	sw $t1, 0($t2)	
+	
+	j obst
 	
 respond_to_esc:
 	li $t1, WHITE # t1 stores red 
@@ -205,6 +326,9 @@ erase_gg:
 	jr $ra
 respond_to_p:
 	# change all obstacle arrays	
+	la $a1, shipArrayImut
+	jal generate_ship
+	
 	la $a0, obstacleArray1
 	jal reset_obstacle
 	
@@ -231,7 +355,7 @@ reset_obstacle:
 	
 	li $a3, BLACK
 	add $a2, $a0, $0
-	jal draw_obst
+	jal draw
 reset_obstacle_loop:
 	# reset x unit 
 	addi $t7, $0, 31
@@ -341,7 +465,7 @@ if:
 	# e draw-out the initial generated obstacles
 	add $a2, $s5, $0 
 	li $a3, GREY
-	jal draw_obst
+	jal draw
 	
 	li $v0, 32
 	li $a0, SLEEP # Wait one second (1000 milliseconds)
@@ -352,11 +476,11 @@ if:
 main_else:
 	# move obstacles
 	li $a3, BLACK
-	jal draw_obst
+	jal draw
 	jal update_obst
 main_else_return:
 	li $a3, GREY
-	jal draw_obst
+	jal draw
 	j obst_next
 	
 generate_obst:	
@@ -411,13 +535,13 @@ regenerate_obst:
 	sw $t3, 36($a2)
 	li $a3, BLACK
 	
-draw_obst:
+draw:
 	addi $sp, $sp, -4 
 	sw $ra, 0($sp)
 	addi, $t2, $0, 0 # load i variable
 	
-draw_obst_loop:
-	bge $t2, THIRTYSIX, draw_obst_end
+draw_loop:
+	bge $t2, THIRTYSIX, draw_end
 	add $t1, $a3, $0
 	
 	add $t4, $a2, $t2 # t4: the index in the array
@@ -426,9 +550,9 @@ draw_obst_loop:
 	sw $t1, 0($t6) # store color at that addr
 	
 	addi $t2, $t2, 4
-	j draw_obst_loop
+	j draw_loop
 	
-draw_obst_end:
+draw_end:
 	# jump back to main function
 	lw $ra, 0($sp)
 	addi, $sp, $sp, 4
@@ -470,6 +594,32 @@ update_obst_end:
 	
 	# pop $ra from stack
 	j main_else_return
+
+move_ship:
+	# a0 - x change 
+	# a1 - y change
+	addi $sp, $sp, -4 
+	sw $ra, 0($sp)
+	la $t1, shipArray
+	addi $t2, $0, 0 # initialize i for loop
+move_ship_loop:
+	bge $t2, THIRTYSIX, move_ship_end
+	
+	add $t3, $t2, $t1 # t3 is the current position
+	
+	lw $t4, 0($t3)	
+	# update mem location with new position	
+	add $t4, $t4, $a0 
+	add $t4, $t4, $a1 
+	
+	sw $t4, 0($t3) # store the new position in shipArray	
+	
+	addi $t2, $t2, 4
+	j move_ship_loop
+move_ship_end:
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+	jr $ra
 	
 address_xy:
 	# stack $ra for returning from address_xy
