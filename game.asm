@@ -341,6 +341,12 @@ respond_to_p:
 	la $a0, obstacleArray4
 	jal reset_obstacle
 	
+	# resert ship
+	
+	la $a0, shipArray
+	la $a1, shipArrayImut
+	jal reset_ship
+	
 	# change escToggle to 0 if need to
 	lw $t1, escToggle
 	beqz  $t1, noChangeEsc
@@ -348,6 +354,36 @@ respond_to_p:
 	jal erase_gg
 noChangeEsc:
 	j main_loop
+reset_ship:
+	addi $s4, $0, 0 # initialize iteratable i 
+	addi $sp, $sp, -4 
+	sw $ra, 0($sp)
+	
+	# erase ship
+	li $a3, BLACK
+	add $a2, $a0, $0
+	jal draw
+reset_ship_loop:
+	# loop to reset all shipArray values to initial
+	bge $s4, THIRTYSIX, reset_ship_end
+	
+	add $t7, $s4, $a0 # a0: shipArray
+	add $t8, $s4, $a1 # a0: shipArrayImut
+	
+	# store elements of shipArrayImut to shipArray
+	lw $t6, 0($t8)
+	sw $t6, 0($t7)
+	
+	addi $s4, $s4, 4
+	j reset_ship_loop
+reset_ship_end:
+	# regenerate ship
+	jal generate_ship
+	# pop from stack
+	lw $ra, 0($sp)
+	addi, $sp, $sp, 4
+	jr $ra
+	
 reset_obstacle:
 	addi $s4, $0, 0 # initialize iteratable i 
 	addi $sp, $sp, -4 
