@@ -72,6 +72,10 @@
 	obstacleArrayY: .word 0, -1, -2, 0, -1, -2, 0, -1, -2
 	shipArray: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
 	shipArrayImut: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
+	 # topBorder
+	 # rightBorder
+	 # bottomBorder
+	 # leftBorder
 .text
 
 .globl main
@@ -109,7 +113,7 @@ keypress_happened:
 	beq $t2, 0x61, respond_to_a
 	beq $t2, 0x73, respond_to_s
 	beq $t2, 0x64, respond_to_d
-	
+	j obst
 generate_ship:
 	
 	# push ra to stack
@@ -158,10 +162,31 @@ respond_to_w:
 	j obst
 	
 respond_to_a:
+        # check if at border
+	la $t1, shipArray
+	lw $t1, 0($t1) # t1 now stores position of top left corner of ship
+	
+	# get x,y value
+	move $a0, $t1
+	jal get_xy # x,y stored in v0,v1
+	
+	# check if unit location is at x = 0
+	# address_xy = (y * width) * 4
+	move $t2, $v1 
+	addi $t3, $0, 4
+	addi $t4, $0, WIDTH
+	
+	mult $t2, $t4	
+	mflo $t2 # y * width	
+	mult $t2, $t3 	
+	mflo $t2 # (y * width) * 4
+	
+	beq $t2, $t1, obst # if t2 == t1 means we're at left border, jump to obst
+
 	# update position
 	addi $a0, $0, -4 # x
 	addi $a1, $0, 0 # y
-	
+
 	# erase ship
 	li $a3, BLACK
 	la $a2, shipArray
@@ -644,10 +669,11 @@ move_ship_loop:
 	add $t3, $t2, $t1 # t3 is the current position
 	
 	lw $t4, 0($t3)	
-	# update mem location with new position	
+	# new position to add
 	add $t4, $t4, $a0 
 	add $t4, $t4, $a1 
 	
+	# update mem location with new position	
 	sw $t4, 0($t3) # store the new position in shipArray	
 	
 	addi $t2, $t2, 4
@@ -659,6 +685,9 @@ move_ship_end:
 	
 address_xy:
 	# stack $ra for returning from address_xy
+	# a0: x 
+	# a1: y
+	
 	addi $sp, $sp, -4 
 	sw $ra, 0($sp)
 	
@@ -673,7 +702,29 @@ address_xy:
 	lw $ra, 0($sp)
 	addi $sp, $sp, 4
 	jr $ra
+get_xy:
+	# stack $ra for returning from address_xy
+	addi $sp, $sp, -4 
+	sw $ra, 0($sp)
 	
+	# to get y, do position // 128. Realize that address(x,y) is Quotient remainder form
+	add $t2, $0, $a0
+	addi $t3, $0, 128
+	div $t2, $t3
+	
+	mflo $v1 # v1 will contain y value (take quotient)
+	
+	# per QRT remainder // 4 is X
+	mfhi $t4
+	addi $t5, $0, 4
+	div $t4, $t5
+	
+	mflo $v0 # move x to v0
+	
+	# pop $ra from stack
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+	jr $ra
 strcmp:
 	# load words from parameter
 	addi $t2, $0, 0 
