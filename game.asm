@@ -51,6 +51,7 @@
 .eqv GREY 0x697278
 .eqv BLACK 0x000000
 .eqv THIRTYSIX 36
+.eqv THIRTYTWO 32
 .eqv SIXTY 60
 .eqv SLEEP 40
 .eqv WHITE 0xFFFFFF
@@ -86,6 +87,13 @@ main:
 	# generate initial location of ship
 	la $a1, shipArrayImut
 	jal generate_ship
+	
+	addi $a0, $0, 0 # 8 * 0
+	jal set_hp
+	
+	li $t1, RED
+	sw $t1, 3968($t0)
+	
 
 	la $s6, obstacleArrayX # mem address of obstacleArrayX
 	la $s7, obstacleArrayY # mem addresss of obstacleArrayY
@@ -136,6 +144,24 @@ generate_ship:
 	jr $ra	
 	
 respond_to_w:
+ 	# check if at border
+	la $t1, shipArray
+	lw $t1, 0($t1) # t1 now stores position of top left corner of ship
+	
+	# get x,y value
+	move $a0, $t1
+	jal get_xy # x,y stored in v0,v1
+	
+	# check if unit location is at x = 0
+	# address_xy = 4x
+	move $t2, $v0 
+	addi $t3, $0, 4
+	
+	mult $t2, $t3	
+
+	mflo $t2 # 4x
+	
+	beq $t2, $t1, obst # if t2 == t1 means we're at top border, jump to obst
 	# update position
 	addi $a0, $0, 0 # x
 	addi $a1, $0, -128 # y
@@ -209,6 +235,29 @@ respond_to_a:
 	j obst
 	
 respond_to_s:
+	# check if at border
+	la $t1, shipArray
+	lw $t1, 16($t1) # t1 now stores position of bottom left corner of ship
+	
+	# get x,y value
+	move $a0, $t1
+	jal get_xy # x,y stored in v0,v1
+	
+	# check if unit location is at x = 0
+	# address_xy = (31*width + x)*4
+	move $t2, $v0 
+	addi $t3, $0, 4
+	addi $t4, $0, WIDTH
+	addi $t5, $0, 30
+	
+	
+	mult $t5, $t4 
+	mflo $t6 # 31 * width	
+	add $t6, $t6, $t2 # 31 * width	+ x
+	mult $t6, $t3 	
+	mflo $t2 # (31 * width + x) * 4
+	
+	beq $t2, $t1, obst # if t2 == t1 means we're at bottom border, jump to obst
 	# update position
 	addi $a0, $0, 0 # x
 	addi $a1, $0, 128 # y
@@ -235,6 +284,29 @@ respond_to_s:
 	j obst
 	
 respond_to_d:
+	# check if at border
+	la $t1, shipArray
+	lw $t1, 32($t1) # t1 now stores position of bottom left corner of ship
+	
+	# get x,y value
+	move $a0, $t1
+	jal get_xy # x,y stored in v0,v1
+	
+	# check if unit location is at x = 0
+	# address_xy = (y*width + 31)*4
+	move $t2, $v1 
+	addi $t3, $0, 4
+	addi $t4, $0, WIDTH
+	addi $t5, $0, 31
+	
+	
+	mult $t2, $t4 
+	mflo $t6 # y * width	
+	add $t6, $t6, $t5 # y * width + 31
+	mult $t6, $t3 	
+	mflo $t2 # (y * width + 31) * 4
+	
+	beq $t2, $t1, obst # if t2 == t1 means we're at bottom border, jump to obst
 	# update position
 	addi $a0, $0, 4 # x
 	addi $a1, $0, 0 # y
@@ -761,6 +833,56 @@ obst_loop_end:
 	syscall
 	
 	j main_loop
+	
+set_hp: 
+	# stack $ra for returning from address_xy
+	addi $sp, $sp, -4 
+	sw $ra, 0($sp)
+	
+	# erase hp first
+	# a0 how much hp is lost (multiple of 8)
+	# t0 is the base address
+	
+	addi $t2, $0, 0 # t2 is i value
+	addi $t3, $0, 32 # t3 is 32
+	sub  $t3, $t3, $a0 
+	
+	addi $t4, $0, 4
+	
+	mult $t3, $t4 # the max we're going to 
+	
+	mflo $t3 # for loop condition(max we're going to)
+	
+	addi $t5, $0, 3968 # first unit of health bar 
+	add $t5, $t5, $t0
+set_hp_loop:
+	bge $t2, $t3, erase_missing_hp
+	
+	li $t1, 0xFF0000 # bright red as health bar
+	add $t6, $t5, $t2
+	sw $t1, 0($t6)
+	
+	addi $t2, $t2, 4
+	j set_hp_loop
+	
+erase_missing_hp:
+	bge $t2, THIRTYTWO, set_hp_end
+	
+	li $t1, 0x000000
+	add $t6, $t5, $t2
+	sw $t1, 0($t6)
+		
+	addi $t2, $t2, 4
+	j erase_missing_hp
+	
+	
+set_hp_end:
+	# pop $ra from stack
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+	jr $ra
+	
+	
 	
 end:
 	li $v0, 1 # terminate the program gracefully
