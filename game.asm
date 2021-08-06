@@ -474,6 +474,7 @@ obstacle1:
 	beq $t4, $t3, if
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
+	addi $a1, $0, 1 # how much units they move left
 	j main_else
 	
 obstacle2:
@@ -485,6 +486,7 @@ obstacle2:
 	beq $t4, $t3, if
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
+	addi $a1, $0, 2
 	j main_else
 	
 obstacle3:
@@ -496,6 +498,7 @@ obstacle3:
 	beq $t4, $t3, if
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
+	addi $a1, $0, 1
 	j main_else
 	
 obstacle4:
@@ -507,6 +510,7 @@ obstacle4:
 	beq $t4, $t3, if
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
+	addi $a1, $0, 2 
 	j main_else
 	
 if_regen:
@@ -528,6 +532,7 @@ if:
 	
 main_else:
 	# move obstacles
+	# a1 is how much the obstacles move
 	# a2 is memory address of obstacle
 	li $a3, BLACK
 	jal draw
@@ -700,6 +705,8 @@ draw_end:
 	jr $ra
 	
 update_obst:	
+
+	move $t8, $a1, # move a1 to t7 since we'll need a1 for calling address_xy
 	addi $t2, $0, 0 # initialize i
 	
 update_obst_loop:
@@ -730,7 +737,7 @@ update_obst_loop:
 	
 update_obst_end:
 	lw $t2, 36($a2)
-	subi $t2, $t2, 1
+	sub $t2, $t2, $t8
 	sw $t2, 36($a2)
 	
 	# pop $ra from stack
