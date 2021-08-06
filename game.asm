@@ -55,11 +55,14 @@
 .eqv SIXTY 60
 .eqv SLEEP 40
 .eqv WHITE 0xFFFFFF
+.eqv HPMAX 128
 
 .data 
 	# obstacle arrays will store position of obstacles, first element is x position. Rest is  position in base_add
-
-	escToggle: .word 0
+	invinsibility: .word 0 # 0 means off
+	hpLoss: .word 0
+	invinsibilityCounter: .word 50 # 25 * 40ms = 1s
+	ggToggle: .word 0
 	strObstacle1: .asciiz "obstacleArray1"
 	strObstacle2: .asciiz "obstacleArray2"
 	strObstacle3: .asciiz "obstacleArray3"
@@ -73,6 +76,7 @@
 	obstacleArrayY: .word 0, -1, -2, 0, -1, -2, 0, -1, -2
 	shipArray: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
 	shipArrayImut: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
+
 	 # topBorder
 	 # rightBorder
 	 # bottomBorder
@@ -88,7 +92,7 @@ main:
 	la $a1, shipArrayImut
 	jal generate_ship
 	
-	addi $a0, $0, 0 # 8 * 0
+	lw $a0, hpLoss # 0 at first, incremenet by 8
 	jal set_hp
 	
 	li $t1, RED
@@ -106,17 +110,19 @@ main_loop:
 	li $t9, 0xffff0000 
 	lw $t8, 0($t9)
 	beq $t8, 1, keypress_happened
-	# check if esc toggle is on
-	lw $t1, escToggle
+	# check if gg toggle is on
+check_gg:
+	lw $t1, ggToggle
 	bnez $t1, main_loop
 	j obst
 	
 keypress_happened:
 	lw $t2, 4($t9) # this assumes $t9 is set to 0xfff0000 from before
 	beq $t2, 0x70, respond_to_p
-	beq $t2, 0x1b, respond_to_esc
 	
 	# wasd keys
+	lw $t1, ggToggle
+	bnez $t1, main_loop
 	beq $t2, 0x77, respond_to_w
 	beq $t2, 0x61, respond_to_a
 	beq $t2, 0x73, respond_to_s
@@ -127,17 +133,34 @@ generate_ship:
 	# push ra to stack
 	addi $sp, $sp, -4
 	sw $ra, 0($sp)
-	# draw the red part
+	# draw the body part
+	# check if invinsibility is on
+	lw $t2, invinsibility 
+	bnez $t2, invins_on_body
 	li $a3, RED 
+	j invins_on_body_end
+invins_on_body: 
+	li $a3, BLUE	
+invins_on_body_end:
 	add $a2, $a1, $0
 	
 	jal draw
 	
-	# draw blue tip now 
+	lw $t2, invinsibility 
+	bnez $t2, invins_on_tip
+	# draw  tip now 
 	lw $t2, 32($a1)
 	add $t2, $t2, $t0
 	li $t1, BLUE 
 	sw $t1, 0($t2)	
+	j invins_on_tip_end
+invins_on_tip:
+	# draw  tip now 
+	lw $t2, 32($a1)
+	add $t2, $t2, $t0
+	li $t1, RED
+	sw $t1, 0($t2)	
+invins_on_tip_end:
 	# pop ra from stack and then return
 	lw $ra, 0($sp)
 	addi $sp, $sp, 4
@@ -173,19 +196,10 @@ respond_to_w:
 	
 	jal move_ship
 	
-	# redraw ship now
-	li $a3, RED
-	la $a2, shipArray
+	la $a1, shipArray
+	jal generate_ship
 	
-	jal draw
-	
-	# redraw blue tip 
-	lw $t2, 32($a2)
-	add $t2, $t2, $t0
-	li $t1, BLUE 
-	sw $t1, 0($t2)	
-	
-	j obst
+	j check_gg
 	
 respond_to_a:
         # check if at border
@@ -221,18 +235,11 @@ respond_to_a:
 	jal move_ship
 	
 	# redraw ship now
-	li $a3, RED
-	la $a2, shipArray
 	
-	jal draw
+	la $a1, shipArray
+	jal generate_ship
 	
-	# redraw blue tip 
-	lw $t2, 32($a2)
-	add $t2, $t2, $t0
-	li $t1, BLUE 
-	sw $t1, 0($t2)	
-	
-	j obst
+	j check_gg
 	
 respond_to_s:
 	# check if at border
@@ -269,19 +276,10 @@ respond_to_s:
 	
 	jal move_ship
 	
-	# redraw ship now
-	li $a3, RED
-	la $a2, shipArray
+	la $a1, shipArray
+	jal generate_ship
 	
-	jal draw
-	
-	# redraw blue tip 
-	lw $t2, 32($a2)
-	add $t2, $t2, $t0
-	li $t1, BLUE 
-	sw $t1, 0($t2)	
-	
-	j obst
+	j check_gg
 	
 respond_to_d:
 	# check if at border
@@ -318,62 +316,11 @@ respond_to_d:
 	
 	jal move_ship
 	
-	# redraw ship now
-	li $a3, RED
-	la $a2, shipArray
+	la $a1, shipArray
+	jal generate_ship
 	
-	jal draw
+	j check_gg
 	
-	# redraw blue tip 
-	lw $t2, 32($a2)
-	add $t2, $t2, $t0
-	li $t1, BLUE 
-	sw $t1, 0($t2)	
-	
-	j obst
-	
-respond_to_esc:
-	li $t1, WHITE # t1 stores red 
-	
-	sw $t1, 1692($t0)
-	sw $t1, 1696($t0)
-	sw $t1, 1700($t0)
-	sw $t1, 1816($t0)
-	sw $t1, 1828($t0)
-	sw $t1, 1956($t0)
-	sw $t1, 1944($t0)
-	sw $t1, 2084($t0)
-	sw $t1, 2076($t0)
-	sw $t1, 2080($t0)
-	sw $t1, 2212($t0)
-	sw $t1, 2332($t0)
-	sw $t1, 2336($t0)
-	
-	sw $t1, 1712($t0)
-	sw $t1, 1716($t0)
-	sw $t1, 1720($t0)
-	sw $t1, 1836($t0)
-	sw $t1, 1848($t0)
-	sw $t1, 1976($t0)
-	sw $t1, 1964($t0)
-	sw $t1, 2104($t0)
-	sw $t1, 2096($t0)
-	sw $t1, 2100($t0)
-	sw $t1, 2232($t0)
-	sw $t1, 2352($t0)
-	sw $t1, 2356($t0)
-	
-	sw $t1, 1736($t0)
-	sw $t1, 1748($t0)
-	sw $t1, 2248($t0)
-	sw $t1, 2124($t0)
-	sw $t1, 2128($t0)
-	sw $t1, 2260($t0)
-	
-	addi $t1, $0, 1
-	sw $t1, escToggle
-	
-	j main_loop
 erase_gg:
 	# push ra to stack
 	addi $sp, $sp, -4 
@@ -415,41 +362,14 @@ erase_gg:
 	sw $t1, 2128($t0)
 	sw $t1, 2260($t0)
 	
-	sw $0, escToggle
+	sw $0, ggToggle
 	
 	# pop from stack and return
 	lw $ra, 0($sp)
 	addi, $sp, $sp, 4
 	jr $ra
 respond_to_p:
-	# change all obstacle arrays	
-	la $a1, shipArrayImut
-	jal generate_ship
-	
-	la $a0, obstacleArray1
-	jal reset_obstacle
-	
-	la $a0, obstacleArray2
-	jal reset_obstacle
-	
-	la $a0, obstacleArray3
-	jal reset_obstacle
-	
-	la $a0, obstacleArray4
-	jal reset_obstacle
-	
-	# resert ship
-	
-	la $a0, shipArray
-	la $a1, shipArrayImut
-	jal reset_ship
-	
-	# change escToggle to 0 if need to
-	lw $t1, escToggle
-	beqz  $t1, noChangeEsc
-	sw $0, escToggle
-	jal erase_gg
-noChangeEsc:
+	jal reset_data
 	j main_loop
 reset_ship:
 	addi $s4, $0, 0 # initialize iteratable i 
@@ -511,7 +431,7 @@ reset_obstacle_end:
 obst:
 	addi $s4, $0, 0 # s4 for main function, t2 for helper function
 obst_loop:
-	bge $s4, SIXTY, obst_loop_end
+	bge $s4, SIXTY, main_end
 	add $t7, $s4, $s0 # specify element in array
 	# check if element is obstacle 1
 	add $a0, $0, $t7
@@ -537,7 +457,7 @@ obst_loop:
 	la $s1, strObstacle4
 	add $a0, $0, $t7
 	add $a1, $0, $s1
-	
+
 	jal strcmp
 	bnez  $v0, obstacle4
 obst_next:
@@ -588,7 +508,7 @@ obstacle4:
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
 	j main_else
-
+	
 if_regen:
 	jal regenerate_obst
 	j obst_next
@@ -608,13 +528,101 @@ if:
 	
 main_else:
 	# move obstacles
+	# a2 is memory address of obstacle
 	li $a3, BLACK
 	jal draw
 	jal update_obst
 main_else_return:
 	li $a3, GREY
 	jal draw
+	
+	lw $t1, invinsibility
+	bnez $t1, invinsibility_on
+	# check for collisions
+	la $a3, shipArray
+	jal collisions_check
 	j obst_next
+invinsibility_on:
+	# update invinsibility counter
+	lw $t1, invinsibilityCounter
+	subi $t1, $t1, 1
+	sw $t1, invinsibilityCounter
+	
+	beqz $t1, reset_invinsibility
+	# if not zero, ignore
+	j obst_next
+reset_invinsibility:
+	# reset counter
+	addi $t1, $0, 50
+	sw $t1, invinsibilityCounter
+	# turn off invinsibility
+	sw $0, invinsibility
+	# redraw ship
+	la $a1, shipArray
+	jal generate_ship
+main_else_end:
+	
+	j obst_next
+
+collisions_check:
+	# push ra to stack
+	addi $sp, $sp, -4
+	sw $ra, 0($sp)
+	
+	addi $t2, $0, 0 # initialize i for loop
+collisions_check_loop:
+	# a2 stores the obstacle mem addresss for positions
+	# a3 stores the ship mem address for positions
+	bge $t2, THIRTYSIX, collisions_check_end
+	
+	add $t4, $t2, $a2 # t4 obstaclle index
+	addi $t3, $0, 0 # initialize j for inner loop
+collisions_check_inner:
+	bge $t3, THIRTYSIX, collisions_check_inner_end
+	
+	add $t5, $t3, $a3 # t5 ship index
+	
+	lw $t6, 0($t4) # load obsctale position into t6
+	lw $t7, 0($t5) # load ship position into t7
+	
+	beq $t6, $t7, collision_occur # if collisions occurs, exit loop
+	
+	addi $t3, $t3, 4
+	j collisions_check_inner
+	
+collisions_check_inner_end:		
+	addi $t2, $t2,4 
+	j collisions_check_loop
+collisions_check_end:	
+	# should only arrive here if there are no collisions
+	lw $ra, 0($sp)
+	addi, $sp, $sp, 4
+	jr $ra
+	
+collision_occur:
+	# update hp_loss and redraw hp 
+	lw $t1, hpLoss
+	addi $t1, $t1, 8
+	sw $t1, hpLoss
+	
+	lw $a0, hpLoss
+	jal set_hp
+	# check if hp = 0, aka hp_loss = 32
+	lw $t1, hpLoss
+	bge $t1, THIRTYTWO, game_over
+	
+	# turn invinsibility on
+	addi $t1, $0, 1
+	sw $t1, invinsibility
+	
+	# draw ship
+	la $a1, shipArray
+	jal generate_ship
+	
+	# if not gg, jump back
+	lw $ra, 0($sp)
+	addi, $sp, $sp, 4
+	jr $ra
 	
 generate_obst:	
 	# push ra to stack
@@ -827,7 +835,7 @@ str_eql:
 	addi $v0, $0, 1
 	jr $ra
   	
-obst_loop_end:
+main_end:
 	li $v0, 32
 	li $a0, SLEEP # Wait one second (1000 milliseconds)
 	syscall
@@ -866,7 +874,7 @@ set_hp_loop:
 	j set_hp_loop
 	
 erase_missing_hp:
-	bge $t2, THIRTYTWO, set_hp_end
+	bge $t2, HPMAX, set_hp_end
 	
 	li $t1, 0x000000
 	add $t6, $t5, $t2
@@ -874,15 +882,95 @@ erase_missing_hp:
 		
 	addi $t2, $t2, 4
 	j erase_missing_hp
-	
-	
 set_hp_end:
 	# pop $ra from stack
 	lw $ra, 0($sp)
 	addi $sp, $sp, 4
 	jr $ra
+
+game_over:
+	li $t1, WHITE # t1 stores red 
 	
+	sw $t1, 1692($t0)
+	sw $t1, 1696($t0)
+	sw $t1, 1700($t0)
+	sw $t1, 1816($t0)
+	sw $t1, 1828($t0)
+	sw $t1, 1956($t0)
+	sw $t1, 1944($t0)
+	sw $t1, 2084($t0)
+	sw $t1, 2076($t0)
+	sw $t1, 2080($t0)
+	sw $t1, 2212($t0)
+	sw $t1, 2332($t0)
+	sw $t1, 2336($t0)
 	
+	sw $t1, 1712($t0)
+	sw $t1, 1716($t0)
+	sw $t1, 1720($t0)
+	sw $t1, 1836($t0)
+	sw $t1, 1848($t0)
+	sw $t1, 1976($t0)
+	sw $t1, 1964($t0)
+	sw $t1, 2104($t0)
+	sw $t1, 2096($t0)
+	sw $t1, 2100($t0)
+	sw $t1, 2232($t0)
+	sw $t1, 2352($t0)
+	sw $t1, 2356($t0)
+	
+	sw $t1, 1736($t0)
+	sw $t1, 1748($t0)
+	sw $t1, 2248($t0)
+	sw $t1, 2124($t0)
+	sw $t1, 2128($t0)
+	sw $t1, 2260($t0)
+	
+	# toggle esc
+	addi $t1, $0, 1
+	sw $t1, ggToggle
+	# continue looping in main_loop until player presses "p" to reset game
+	j main_loop
+reset_data:
+	# stack $ra for returning from address_xy
+	addi $sp, $sp, -4 
+	sw $ra, 0($sp)
+
+	# reset hpLoss
+	sw $0, hpLoss
+	lw $a0, hpLoss
+	jal set_hp
+
+	# change all obstacle arrays	
+	la $a1, shipArrayImut
+	jal generate_ship
+	
+	la $a0, obstacleArray1
+	jal reset_obstacle
+	
+	la $a0, obstacleArray2
+	jal reset_obstacle
+	
+	la $a0, obstacleArray3
+	jal reset_obstacle
+	
+	la $a0, obstacleArray4
+	jal reset_obstacle
+	
+	# reset ship
+	la $a0, shipArray
+	la $a1, shipArrayImut
+	jal reset_ship
+	
+	# change ggToggle to 0 if need to
+	lw $t1, ggToggle
+	beqz  $t1, noChangeEsc
+	sw $0, ggToggle
+	jal erase_gg
+noChangeEsc:
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+	jr $ra
 	
 end:
 	li $v0, 1 # terminate the program gracefully
