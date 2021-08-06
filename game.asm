@@ -50,15 +50,24 @@
 .eqv BLUE 0x457B9D
 .eqv GREY 0x697278
 .eqv BLACK 0x000000
+.eqv PURPLE 0x7F00FF
+.eqv LIGHTBLUE 0x009ACD
 .eqv THIRTYSIX 36
 .eqv THIRTYTWO 32
 .eqv SIXTY 60
 .eqv SLEEP 40
 .eqv WHITE 0xFFFFFF
 .eqv HPMAX 128
+.eqv LEVEL1 1
+.eqv LEVEL2 2
+.eqv LEVEL3 3
+
 
 .data 
 	# obstacle arrays will store position of obstacles, first element is x position. Rest is  position in base_add
+	obstacleColor: .word GREY
+	level: .word 1 # initial level
+	obstacleCount: .word 16 # once this hits 0, enter next level
 	invinsibility: .word 0 # 0 means off
 	hpLoss: .word 0
 	invinsibilityCounter: .word 50 # 25 * 40ms = 1s
@@ -76,7 +85,8 @@
 	obstacleArrayY: .word 0, -1, -2, 0, -1, -2, 0, -1, -2
 	shipArray: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
 	shipArrayImut: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
-
+	speed1: .word 1
+	speed2: .word 2
 	 # topBorder
 	 # rightBorder
 	 # bottomBorder
@@ -94,10 +104,6 @@ main:
 	
 	lw $a0, hpLoss # 0 at first, incremenet by 8
 	jal set_hp
-	
-	li $t1, RED
-	sw $t1, 3968($t0)
-	
 
 	la $s6, obstacleArrayX # mem address of obstacleArrayX
 	la $s7, obstacleArrayY # mem addresss of obstacleArrayY
@@ -107,6 +113,12 @@ main_loop:
 	la $s0, strObstacles
 	la $s1, strObstacle1
 	
+	# check if we go to next level
+	lw $t1, obstacleCount
+	bgtz $t1, sameLevel
+	jal incrementLevel
+
+sameLevel:
 	li $t9, 0xffff0000 
 	lw $t8, 0($t9)
 	beq $t8, 1, keypress_happened
@@ -115,7 +127,38 @@ check_gg:
 	lw $t1, ggToggle
 	bnez $t1, main_loop
 	j obst
+
+incrementLevel:
+	# increment level difficulty 
+	lw $t1, level
+	addi $t1, $t1, 1
+	sw $t1, level
 	
+	li $t3, LIGHTBLUE
+	beq $t1, LEVEL2, level_increase # remember to change bge to beq if i'm gonna add more levels
+	li $t3, PURPLE
+	beq $t1, LEVEL3, level_increase # 
+	li $t3, RED
+	bgt $t1, LEVEL3, level_increase # perma increase
+	j incrementLevelEnd
+level_increase:
+	# udpate speed 1
+	lw $t2, speed1
+	addi $t2, $t2, 1
+	sw $t2, speed1
+	
+	# update speed 2
+	lw $t2, speed2
+	addi $t2, $t2, 1
+	sw  $t2, speed2
+	
+	# update obstacle color
+	sw $t3, obstacleColor
+	
+incrementLevelEnd:
+	addi $t3, $0, 16
+	sw $t3, obstacleCount
+	jr $ra
 keypress_happened:
 	lw $t2, 4($t9) # this assumes $t9 is set to 0xfff0000 from before
 	beq $t2, 0x70, respond_to_p
@@ -137,7 +180,7 @@ generate_ship:
 	# check if invinsibility is on
 	lw $t2, invinsibility 
 	bnez $t2, invins_on_body
-	li $a3, RED 
+	li $a3, RED
 	j invins_on_body_end
 invins_on_body: 
 	li $a3, BLUE	
@@ -474,7 +517,7 @@ obstacle1:
 	beq $t4, $t3, if
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
-	addi $a1, $0, 1 # how much units they move left
+	lw $a1, speed1 # how much units they move left
 	j main_else
 	
 obstacle2:
@@ -486,7 +529,7 @@ obstacle2:
 	beq $t4, $t3, if
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
-	addi $a1, $0, 2
+	lw $a1, speed2
 	j main_else
 	
 obstacle3:
@@ -498,7 +541,7 @@ obstacle3:
 	beq $t4, $t3, if
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
-	addi $a1, $0, 1
+	lw $a1, speed1
 	j main_else
 	
 obstacle4:
@@ -510,18 +553,22 @@ obstacle4:
 	beq $t4, $t3, if
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
-	addi $a1, $0, 2 
+	lw $a1, speed2
 	j main_else
 	
 if_regen:
 	jal regenerate_obst
+	lw $t1, obstacleCount
+	subi $t1, $t1, 1
+	sw $t1, obstacleCount
+	
 	j obst_next
 	
 if:
 	jal generate_obst
 	# e draw-out the initial generated obstacles
 	add $a2, $s5, $0 
-	li $a3, GREY
+	lw $a3, obstacleColor
 	jal draw
 	
 	li $v0, 32
@@ -538,7 +585,7 @@ main_else:
 	jal draw
 	jal update_obst
 main_else_return:
-	li $a3, GREY
+	lw $a3, obstacleColor
 	jal draw
 	
 	lw $t1, invinsibility
@@ -680,6 +727,7 @@ regenerate_obst:
 	addi $t3, $0, 31
 	sw $t3, 36($a2)
 	li $a3, BLACK
+	# next we goes to erase the obstacle
 	
 draw:
 	addi $sp, $sp, -4 
@@ -843,6 +891,7 @@ str_eql:
 	jr $ra
   	
 main_end:
+	# the end of main function, jump back to main_loop
 	li $v0, 32
 	li $a0, SLEEP # Wait one second (1000 milliseconds)
 	syscall
