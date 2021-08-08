@@ -71,7 +71,7 @@
 	# obstacle arrays will store position of obstacles, first element is x position. Rest is  position in base_add
 	obstacleColor: .word GREY
 	level: .word 1 # initial level
-	obstacleCount: .word 16 # once this hits 0, enter next level
+	obstacleCount: .word 32 # once this hits 0, enter next level
 	invinsibility: .word 0 # 0 means off
 	hpLoss: .word 0
 	invinsibilityCounter: .word 50 # 25 * 40ms = 1s
@@ -85,8 +85,17 @@
 	obstacleArray2: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0 
 	obstacleArray3: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0 
 	obstacleArray4: .word 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0 
+	
+	# different generators for different obstacles
 	obstacleArrayX: .word 0, 0, 0, -1, -1, -1, -2, -2, -2
 	obstacleArrayY: .word 0, -1, -2, 0, -1, -2, 0, -1, -2
+	obstacleArrayXa: .word -4, -3, -2, -1, 0, -2, -2, -2 ,-2
+	obstacleArrayYa: .word 0, 0, 0, 0, 0, -1, -2, 1, 2
+	obstacleArrayXb: .word 0, -1, -2, -3, -4, -5, -6, -7 ,-8
+	obstacleArrayYb: .word 0, 0, 0, 0, 0, 0, 0, 0, 0
+	
+	x_regen: .word 1
+
 	shipArray: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
 	shipArrayImut: .word 1792, 1920, 2048, 2176, 2304, 1924, 2052, 2180, 2056
 	speed1: .word 1
@@ -109,8 +118,6 @@ main:
 	lw $a0, hpLoss # 0 at first, incremenet by 8
 	jal set_hp
 
-	la $s6, obstacleArrayX # mem address of obstacleArrayX
-	la $s7, obstacleArrayY # mem addresss of obstacleArrayY
 	
 main_loop:	
 	
@@ -121,6 +128,7 @@ main_loop:
 	lw $t1, obstacleCount
 	bgtz $t1, sameLevel
 	jal incrementLevel
+
 
 sameLevel:
 	li $t9, 0xffff0000 
@@ -531,6 +539,34 @@ reset_obstacle_end:
 	jr $ra
 	
 obst:
+	lw $t1, level
+
+	addi $t2, $0, 2
+	beq $t1, $t2, obstacles_a
+	bgt $t1, $t2, obstacles_b
+	
+	la $s6, obstacleArrayX # mem address of obstacleArrayX
+	la $s7, obstacleArrayY # mem addresss of obstacleArrayY
+	j regular_obstacles
+	
+obstacles_a:
+	la $s6, obstacleArrayXa # mem address of obstacleArrayXa
+	la $s7, obstacleArrayYa # mem addresss of obstacleArrayYa
+	
+	addi $t3, $0, 2
+	sw $t3, x_regen
+
+	j regular_obstacles
+obstacles_b:
+	la $s6, obstacleArrayXb # mem address of obstacleArrayXa
+	la $s7, obstacleArrayYb # mem addresss of obstacleArrayYa
+	
+	addi $t3, $0, 7
+	sw $t3, x_regen
+
+	j regular_obstacles
+		
+regular_obstacles:
 	addi $s4, $0, 0 # s4 for main function, t2 for helper function
 obst_loop:
 	bge $s4, SIXTY, main_end
@@ -574,6 +610,7 @@ obstacle1:
 	# check if we generate obstacles or move them
 	addi $t3, $0, 31
 	beq $t4, $t3, if
+	lw $t3, x_regen
 	addi $t3, $0, 1
 	ble $t4, $t3, if_regen
 	lw $a1, speed1 # how much units they move left
@@ -586,7 +623,7 @@ obstacle2:
 	# check if we generate obstacles or move them
 	addi $t3, $0, 31
 	beq $t4, $t3, if
-	addi $t3, $0, 1
+	lw $t3, x_regen
 	ble $t4, $t3, if_regen
 	lw $a1, speed2
 	j main_else
@@ -598,7 +635,7 @@ obstacle3:
 	# check if we generate obstacles or move them
 	addi $t3, $0, 31
 	beq $t4, $t3, if
-	addi $t3, $0, 1
+	lw $t3, x_regen
 	ble $t4, $t3, if_regen
 	lw $a1, speed1
 	j main_else
@@ -610,7 +647,7 @@ obstacle4:
 	# check if we generate obstacles or move them
 	addi $t3, $0, 31
 	beq $t4, $t3, if
-	addi $t3, $0, 1
+	lw $t3, x_regen
 	ble $t4, $t3, if_regen
 	lw $a1, speed2
 	j main_else
@@ -847,7 +884,7 @@ generate_obst:
 	# generate obst x,y positions then draw them (same parameters)
 	li $v0, 42
 	li $a0, 0
-	li $a1, 31
+	li $a1, 29
 	syscall
 	
 	addi $t2, $0, 0 # initialize i value
@@ -1180,6 +1217,10 @@ reset_data:
 	# stack $ra for returning from address_xy
 	addi $sp, $sp, -4 
 	sw $ra, 0($sp)
+	
+	# reset x_regen
+	addi $t1, $0, 1
+	sw $t1, x_regen
 
 	# reset hpLoss
 	sw $0, hpLoss
@@ -1225,6 +1266,10 @@ reset_data:
 	la $a0, shipArray
 	la $a1, shipArrayImut
 	jal reset_ship
+	
+	# reset bullet 
+	la $a2, bulletArray
+	jal reset_bullet
 	
 	# change ggToggle to 0 if need to
 	lw $t1, ggToggle
