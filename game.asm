@@ -51,9 +51,11 @@
 .eqv GREY 0x697278
 .eqv BLACK 0x000000
 .eqv PURPLE 0x7F00FF
+.eqv YELLOW 0xFFFF00
 .eqv LIGHTBLUE 0x009ACD
 .eqv THIRTYSIX 36
 .eqv THIRTYTWO 32
+.eqv TWELVE 12
 .eqv SIXTY 60
 .eqv SLEEP 40
 .eqv WHITE 0xFFFFFF
@@ -64,6 +66,8 @@
 
 
 .data 
+	bulletToggle: .word 0
+	bulletArray: .word 0, 0, 0
 	# obstacle arrays will store position of obstacles, first element is x position. Rest is  position in base_add
 	obstacleColor: .word GREY
 	level: .word 1 # initial level
@@ -138,8 +142,8 @@ incrementLevel:
 	beq $t1, LEVEL2, level_increase # remember to change bge to beq if i'm gonna add more levels
 	li $t3, PURPLE
 	beq $t1, LEVEL3, level_increase # 
-	li $t3, RED
-	bgt $t1, LEVEL3, level_increase # perma increase
+	#li $t3, RED
+	#bgt $t1, LEVEL3, level_increase # perma increase
 	j incrementLevelEnd
 level_increase:
 	# udpate speed 1
@@ -170,9 +174,13 @@ keypress_happened:
 	beq $t2, 0x61, respond_to_a
 	beq $t2, 0x73, respond_to_s
 	beq $t2, 0x64, respond_to_d
-	j obst
-generate_ship:
 	
+	lw $t1, bulletToggle
+	bnez $t1, obst
+	beq $t2, 0x6f, respond_to_o
+	j obst
+	
+generate_ship:
 	# push ra to stack
 	addi $sp, $sp, -4
 	sw $ra, 0($sp)
@@ -186,20 +194,22 @@ invins_on_body:
 	li $a3, BLUE	
 invins_on_body_end:
 	add $a2, $a1, $0
-	
+	move $t9, $a1
+
+	addi $a0, $0, 36
 	jal draw
 	
 	lw $t2, invinsibility 
 	bnez $t2, invins_on_tip
 	# draw  tip now 
-	lw $t2, 32($a1)
+	lw $t2, 32($t9)
 	add $t2, $t2, $t0
 	li $t1, BLUE 
 	sw $t1, 0($t2)	
 	j invins_on_tip_end
 invins_on_tip:
 	# draw  tip now 
-	lw $t2, 32($a1)
+	lw $t2, 32($t9)
 	add $t2, $t2, $t0
 	li $t1, RED
 	sw $t1, 0($t2)	
@@ -208,7 +218,36 @@ invins_on_tip_end:
 	lw $ra, 0($sp)
 	addi $sp, $sp, 4
 	jr $ra	
+
+respond_to_o:
+	# get position to the right of blue tip
+	la $t1, shipArray
+	lw $t1, 32($t1)
+	addi $t1, $t1, 4 
 	
+	la $t3, bulletArray
+	addi $t2, $0, 0 # initialize i value
+respond_to_o_loop:
+	bge $t2, TWELVE, respond_to_o_end
+	# get index for array
+	add $t4, $t3, $t2
+	add $t5, $t1, $t2 # get position want to add
+	
+	sw $t5, 0($t4)
+
+	addi $t2, $t2 4
+	j respond_to_o_loop
+respond_to_o_end:
+	la $a2, bulletArray
+	li $a3, YELLOW
+	addi $a0, $0, TWELVE
+	jal draw
+	# turn on bulletToggle
+	addi $t1, $0, 1
+	sw $t1, bulletToggle
+	
+	j check_gg
+
 respond_to_w:
  	# check if at border
 	la $t1, shipArray
@@ -217,8 +256,7 @@ respond_to_w:
 	# get x,y value
 	move $a0, $t1
 	jal get_xy # x,y stored in v0,v1
-	
-	# check if unit location is at x = 0
+
 	# address_xy = 4x
 	move $t2, $v0 
 	addi $t3, $0, 4
@@ -228,14 +266,18 @@ respond_to_w:
 	mflo $t2 # 4x
 	
 	beq $t2, $t1, obst # if t2 == t1 means we're at top border, jump to obst
-	# update position
-	addi $a0, $0, 0 # x
-	addi $a1, $0, -128 # y
+
 	
 	# erase ship
 	li $a3, BLACK
 	la $a2, shipArray
+
+	addi $a0, $0, 36
 	jal draw
+	
+	# update position
+	addi $a0, $0, 0 # x
+	addi $a1, $0, -128 # y
 	
 	jal move_ship
 	
@@ -252,8 +294,7 @@ respond_to_a:
 	# get x,y value
 	move $a0, $t1
 	jal get_xy # x,y stored in v0,v1
-	
-	# check if unit location is at x = 0
+
 	# address_xy = (y * width) * 4
 	move $t2, $v1 
 	addi $t3, $0, 4
@@ -266,15 +307,17 @@ respond_to_a:
 	
 	beq $t2, $t1, obst # if t2 == t1 means we're at left border, jump to obst
 
+	# erase ship
+	li $a3, BLACK
+	la $a2, shipArray
+
+	addi $a0, $0, 36
+	jal draw
+	
 	# update position
 	addi $a0, $0, -4 # x
 	addi $a1, $0, 0 # y
 
-	# erase ship
-	li $a3, BLACK
-	la $a2, shipArray
-	jal draw
-	
 	jal move_ship
 	
 	# redraw ship now
@@ -293,7 +336,6 @@ respond_to_s:
 	move $a0, $t1
 	jal get_xy # x,y stored in v0,v1
 	
-	# check if unit location is at x = 0
 	# address_xy = (31*width + x)*4
 	move $t2, $v0 
 	addi $t3, $0, 4
@@ -308,15 +350,18 @@ respond_to_s:
 	mflo $t2 # (31 * width + x) * 4
 	
 	beq $t2, $t1, obst # if t2 == t1 means we're at bottom border, jump to obst
-	# update position
-	addi $a0, $0, 0 # x
-	addi $a1, $0, 128 # y
 
 	# erase ship
 	li $a3, BLACK
 	la $a2, shipArray
+
+	addi $a0, $0, 36
 	jal draw
 	
+	# update position
+	addi $a0, $0, 0 # x
+	addi $a1, $0, 128 # y
+
 	jal move_ship
 	
 	la $a1, shipArray
@@ -333,7 +378,6 @@ respond_to_d:
 	move $a0, $t1
 	jal get_xy # x,y stored in v0,v1
 	
-	# check if unit location is at x = 0
 	# address_xy = (y*width + 31)*4
 	move $t2, $v1 
 	addi $t3, $0, 4
@@ -347,16 +391,19 @@ respond_to_d:
 	mult $t6, $t3 	
 	mflo $t2 # (y * width + 31) * 4
 	
-	beq $t2, $t1, obst # if t2 == t1 means we're at bottom border, jump to obst
-	# update position
-	addi $a0, $0, 4 # x
-	addi $a1, $0, 0 # y
+	beq $t2, $t1, obst # if t2 == t1 means we're at right border, jump to obst
+
 	
 	# erase ship
 	li $a3, BLACK
 	la $a2, shipArray
+	
+	addi $a0, $0, 36
 	jal draw
 	
+	# update position
+	addi $a0, $0, 4 # x
+	addi $a1, $0, 0 # y
 	jal move_ship
 	
 	la $a1, shipArray
@@ -422,7 +469,12 @@ reset_ship:
 	# erase ship
 	li $a3, BLACK
 	add $a2, $a0, $0
+
+	move $t7, $a0
+	addi $a0, $0, 36
 	jal draw
+	move $a0, $t7
+	
 reset_ship_loop:
 	# loop to reset all shipArray values to initial
 	bge $s4, THIRTYSIX, reset_ship_end
@@ -445,18 +497,25 @@ reset_ship_end:
 	jr $ra
 	
 reset_obstacle:
+	# a0 is obstalce array
 	addi $s4, $0, 0 # initialize iteratable i 
 	addi $sp, $sp, -4 
 	sw $ra, 0($sp)
 	
 	li $a3, BLACK
 	add $a2, $a0, $0
+	
+	move $t7, $a0
+	addi $a0, $0, 36
+	
 	jal draw
+	move $a0, $t7
 reset_obstacle_loop:
 	# reset x unit 
 	addi $t7, $0, 31
 	sw $t7, 36($a0)
 	
+	# reset rest to 0
 	bge $s4, THIRTYSIX, reset_obstacle_end	
 	
 	add $t7, $s4, $a0
@@ -557,6 +616,7 @@ obstacle4:
 	j main_else
 	
 if_regen:
+
 	jal regenerate_obst
 	lw $t1, obstacleCount
 	subi $t1, $t1, 1
@@ -569,6 +629,8 @@ if:
 	# e draw-out the initial generated obstacles
 	add $a2, $s5, $0 
 	lw $a3, obstacleColor
+
+	addi $a0, $0, 36
 	jal draw
 	
 	li $v0, 32
@@ -582,17 +644,64 @@ main_else:
 	# a1 is how much the obstacles move
 	# a2 is memory address of obstacle
 	li $a3, BLACK
+	
+	move $s2, $a2 # save obstacle mem into s2 for now
+	
+	addi $a0, $0, 36
 	jal draw
 	jal update_obst
+
 main_else_return:
 	lw $a3, obstacleColor
+	addi $a0, $0, 36
 	jal draw
+	
+	# bullet stuff (excluding collision with obstacle)
+	lw $t1, bulletToggle
+	beqz $t1, after_bullet
+	# update bullet location
+	la $a2, bulletArray
+	
+	li $a3, BLACK
+	addi $a0, $0, 12
+	jal draw
+	
+	jal move_bullet
+	
+	li $a3, YELLOW
+	addi $a0, $0, 12
+	jal draw
+	
+	# check bullet collision (at end)
+	la $a2, bulletArray
+	jal bullet_at_end
+check_bullet_obstacle_collision:
+	# check bullet collision (at obstacle)
+	# move obstacle array to $a2
+	move $a2, $s2
+	la $a3, bulletArray
+	addi $a1, $0, 12
+	jal collisions_check
+	
+	beqz $v0, after_bullet # no collisions
+	# yes collision
+	la $a2, bulletArray
+	jal reset_bullet
+	
+	move $a0, $s2
+	jal reset_obstacle
+after_bullet:
+	move $a2, $s2 # s2 has obstacle array
 	
 	lw $t1, invinsibility
 	bnez $t1, invinsibility_on
 	# check for collisions
 	la $a3, shipArray
+	addi $a1, $0, 36
 	jal collisions_check
+	# check if collisions_check returned true
+	addi $t1, $0, 1
+	beq  $v0, $t1, collision_occur
 	j obst_next
 invinsibility_on:
 	# update invinsibility counter
@@ -616,6 +725,55 @@ main_else_end:
 	
 	j obst_next
 
+bullet_at_end:
+	# a2 is array 
+	# push ra to stack
+	addi $sp, $sp, -4
+	sw $ra, 0($sp)
+	
+	addi $t8, $0, 0 # initialize i to 0
+bullet_at_end_loop:
+	bge $t8, TWELVE, bullet_at_end_false
+	
+	add $t1, $a2, $t8 # the index of bullet position in t1	
+	lw $t1, 0($t1) # get position of bullets
+	# get x,y value
+	move $a0, $t1
+	jal get_xy # x,y stored in v0,v1
+	
+	# check if unit location is at x = 31
+	# address_xy = (y*width + 31)*4
+	move $t7, $v1 
+	addi $t3, $0, 4
+	addi $t4, $0, WIDTH
+	addi $t5, $0, 31
+
+	mult $t7, $t4 
+	mflo $t6 # y * width	
+	add $t6, $t6, $t5 # y * width + 31
+	mult $t6, $t3 	
+	mflo $t7 # (y * width + 31) * 4
+	
+	beq $t7, $t1, bullet_at_end_true # if t2 == t1 means bullet is at border
+	# reset bullet, turn off bulletToggle and draw it to black
+	addi $t8, $t8, 4
+	j bullet_at_end_loop
+bullet_at_end_true:
+	# exit
+	# a2 has bullet array
+	# a3 will have color
+	la $a2, bulletArray
+	jal reset_bullet
+	
+	lw $ra, 0($sp)
+	addi, $sp, $sp, 4
+	jr $ra
+bullet_at_end_false:
+	# exit
+	lw $ra, 0($sp)
+	addi, $sp, $sp, 4
+	jr $ra
+	
 collisions_check:
 	# push ra to stack
 	addi $sp, $sp, -4
@@ -624,20 +782,22 @@ collisions_check:
 	addi $t2, $0, 0 # initialize i for loop
 collisions_check_loop:
 	# a2 stores the obstacle mem addresss for positions
-	# a3 stores the ship mem address for positions
+	# a3 stores the ship/bullet mem address for positions
+	# a1 stores the ship/bullet array size
 	bge $t2, THIRTYSIX, collisions_check_end
 	
 	add $t4, $t2, $a2 # t4 obstaclle index
 	addi $t3, $0, 0 # initialize j for inner loop
 collisions_check_inner:
-	bge $t3, THIRTYSIX, collisions_check_inner_end
+	bge $t3, $a1, collisions_check_inner_end
 	
-	add $t5, $t3, $a3 # t5 ship index
+	add $t5, $t3, $a3 # t5 ship/bullet index
 	
 	lw $t6, 0($t4) # load obsctale position into t6
 	lw $t7, 0($t5) # load ship position into t7
 	
-	beq $t6, $t7, collision_occur # if collisions occurs, exit loop
+	
+	beq $t6, $t7, collisions_check_true # if collisions occurs, set return value to true, and exit loop
 	
 	addi $t3, $t3, 4
 	j collisions_check_inner
@@ -647,6 +807,12 @@ collisions_check_inner_end:
 	j collisions_check_loop
 collisions_check_end:	
 	# should only arrive here if there are no collisions
+	addi $v0, $0, 0 # set return value to false
+	lw $ra, 0($sp)
+	addi, $sp, $sp, 4
+	jr $ra
+collisions_check_true:
+	addi $v0, $0, 1 # set return value to true
 	lw $ra, 0($sp)
 	addi, $sp, $sp, 4
 	jr $ra
@@ -672,9 +838,7 @@ collision_occur:
 	jal generate_ship
 	
 	# if not gg, jump back
-	lw $ra, 0($sp)
-	addi, $sp, $sp, 4
-	jr $ra
+	j obst_next
 	
 generate_obst:	
 	# push ra to stack
@@ -728,14 +892,17 @@ regenerate_obst:
 	sw $t3, 36($a2)
 	li $a3, BLACK
 	# next we goes to erase the obstacle
+	addi $a0, $0, 36
 	
 draw:
+	# a0 is loop size
+	# a2 array
+	# a3 color
 	addi $sp, $sp, -4 
 	sw $ra, 0($sp)
 	addi, $t2, $0, 0 # load i variable
-	
 draw_loop:
-	bge $t2, THIRTYSIX, draw_end
+	bge $t2, $a0, draw_end
 	add $t1, $a3, $0
 	
 	add $t4, $a2, $t2 # t4: the index in the array
@@ -785,7 +952,7 @@ update_obst_loop:
 	
 update_obst_end:
 	lw $t2, 36($a2)
-	sub $t2, $t2, $t8
+	sub $t2, $t2, $t8 # how much obstacle moves
 	sw $t2, 36($a2)
 	
 	# pop $ra from stack
@@ -817,7 +984,29 @@ move_ship_end:
 	lw $ra, 0($sp)
 	addi $sp, $sp, 4
 	jr $ra
+
+move_bullet:
+	addi $sp, $sp, -4 
+	sw $ra, 0($sp)
 	
+	addi $t2, $0, 0  # initialize 1
+move_bullet_loop:
+	# a1 is bulletArray
+	bge $t2, 12, move_bullet_end
+	
+	add $t3, $a2, $t2 # get index of bullet array
+	
+	# load new bullet position
+	lw $t4, 0($t3)
+	addi $t4, $t4, 4 # move it right 1 unit
+	sw $t4, 0($t3)
+	
+	addi $t2, $t2, 4
+	j move_bullet_loop
+move_bullet_end:
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+	jr $ra
 address_xy:
 	# stack $ra for returning from address_xy
 	# a0: x 
@@ -997,7 +1186,26 @@ reset_data:
 	lw $a0, hpLoss
 	jal set_hp
 
-	# change all obstacle arrays	
+	# reset level modifier
+	addi $t1, $0, 1
+	sw $t1, level
+	
+	# reset obstacle color
+	addi $t1, $0, GREY
+	sw $t1,  obstacleColor
+	
+	# reset obstacle count 
+	addi $t1, $0, 16
+	sw $t1, obstacleCount
+	
+	# reset speed
+	addi $t1, $0, 1
+	sw $t1, speed1
+	
+	addi $t1, $0, 2
+	sw $t1, speed2
+	
+	# change all obstacle and ship arrays	
 	la $a1, shipArrayImut
 	jal generate_ship
 	
@@ -1027,7 +1235,62 @@ noChangeEsc:
 	lw $ra, 0($sp)
 	addi $sp, $sp, 4
 	jr $ra
+
+bullet_obst:
+	# check if obstalce hits bullet 
+	# a2 is obstacle array mem address
+	# a3 is bullet array mem address
 	
+	addi $t2, $0, 0 # initialize $t2
+	
+	move $t7, $a2 # t7 is now obstalce array
+	move $t8, $a3 # t8 is now bullet array
+bullet_obst_loop:
+	bge $t2, 36, bullet_obst_end
+	
+	# load color of obstacle 
+	add $t1, $t2, $t7
+	lw $t1, 0($t1) #  the obstalce position
+	add $t3, $t1, $t0 
+	lw $t4, 0($t3) 
+ 
+ 	li $t1, YELLOW
+	bne $t1, $t6, bullet_obst_no_collision # no collision if that position is not yellow
+	
+	# reset obstacle 
+	# a0 is obstacle array
+	
+	move $a0, $t2
+	jal reset_obstacle
+	
+	# there's collision
+	# a2 is bullet array
+	move $a2, $t8
+	jal reset_bullet
+	
+	j bullet_obst_end # once there's collision, we leave
+bullet_obst_no_collision:
+	addi $t2, $t2, 4
+	j bullet_obst_loop
+bullet_obst_end:
+	jr $ra
+	
+reset_bullet:
+	# a2 is bullet array
+	# stack $ra for returning from draw
+	addi $sp, $sp, -4 
+	sw $ra, 0($sp)
+	
+	li $a3, BLACK
+	addi $a0, $0, 12
+	jal draw 
+	
+	sw $0, bulletToggle
+	
+	# pop ra from stack
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+	jr $ra
 end:
 	li $v0, 1 # terminate the program gracefully
 	addi $t0, $0, 69
